@@ -3,6 +3,7 @@ package detectors
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"strings"
@@ -103,46 +104,8 @@ func (cts *ComprehensiveTLSStage) analyzeTLSState(state tls.ConnectionState, dom
 	supportsTLS13 := state.Version == tls.VersionTLS13
 	supportsHTTP2 := state.NegotiatedProtocol == "h2" && state.NegotiatedProtocolIsMutual
 
-	// SNI检测
-	supportsSNI := true // 成功建立连接说明支持SNI
-	sniMatch := false
-	if len(state.PeerCertificates) > 0 {
-		cert := state.PeerCertificates[0]
-		sniMatch = cert.VerifyHostname(domain) == nil
-	}
-
-	// 证书检测（真正的有效性检测）
-	var certResult *types.CertificateResult
-	if len(state.PeerCertificates) > 0 {
-		cert := state.PeerCertificates[0]
-		now := time.Now()
-
-		// 检查证书是否在有效期内
-		inValidityPeriod := now.After(cert.NotBefore) && now.Before(cert.NotAfter)
-
-		// 检查证书链是否可信
-		chainTrusted := len(state.VerifiedChains) > 0
-
-		// 检查主机名验证（已在上面完成）
-		hostnameValid := sniMatch
-
-		// 只有三者都满足才认为证书有效
-		certValid := inValidityPeriod && chainTrusted && hostnameValid
-
-		var daysUntilExpiry int
-		if certValid {
-			daysUntilExpiry = int(time.Until(cert.NotAfter).Hours() / 24)
-		}
-
-		certResult = &types.CertificateResult{
-			Valid:           certValid,
-			Issuer:          cert.Issuer.String(),
-			Subject:         cert.Subject.String(),
-			NotBefore:       cert.NotBefore,
-			NotAfter:        cert.NotAfter,
-			DaysUntilExpiry: daysUntilExpiry,
-		}
-	}
+	// 证书与主机名（SNI）检测：握手层已关闭校验，这里手动验证。
+	certResult, sniMatch := evaluateCertificate(state.PeerCertificates, domain, time.Now())
 
 	return &ComprehensiveTLSResult{
 		TLS: &types.TLSResult{
@@ -154,12 +117,55 @@ func (cts *ComprehensiveTLSStage) analyzeTLSState(state tls.ConnectionState, dom
 			HandshakeTime:   handshakeTime,
 		},
 		SNI: &types.SNIResult{
-			SupportsSNI: supportsSNI,
+			SupportsSNI: true, // 成功建立连接说明支持SNI
 			SNIMatch:    sniMatch,
 			ServerName:  domain,
 		},
 		Certificate: certResult,
 	}
+}
+
+// evaluateCertificate 手动验证叶子证书（用于 InsecureSkipVerify 模式下的检测）。
+// 同时检查证书链可信、是否在有效期内、主机名是否匹配，三者都满足才算有效。
+// 返回证书结果以及主机名是否匹配（即 SNIMatch）。
+func evaluateCertificate(peerCerts []*x509.Certificate, domain string, now time.Time) (*types.CertificateResult, bool) {
+	if len(peerCerts) == 0 {
+		return nil, false
+	}
+	leaf := peerCerts[0]
+
+	// 主机名匹配
+	hostnameValid := leaf.VerifyHostname(domain) == nil
+
+	// 有效期
+	inValidityPeriod := now.After(leaf.NotBefore) && now.Before(leaf.NotAfter)
+
+	// 证书链可信：用服务器附带的中间证书构建链，对系统根证书验证
+	intermediates := x509.NewCertPool()
+	for _, c := range peerCerts[1:] {
+		intermediates.AddCert(c)
+	}
+	_, chainErr := leaf.Verify(x509.VerifyOptions{
+		Intermediates: intermediates,
+		CurrentTime:   now,
+	})
+	chainTrusted := chainErr == nil
+
+	certValid := inValidityPeriod && chainTrusted && hostnameValid
+
+	daysUntilExpiry := 0
+	if certValid {
+		daysUntilExpiry = int(leaf.NotAfter.Sub(now).Hours() / 24)
+	}
+
+	return &types.CertificateResult{
+		Valid:           certValid,
+		Issuer:          leaf.Issuer.String(),
+		Subject:         leaf.Subject.String(),
+		NotBefore:       leaf.NotBefore,
+		NotAfter:        leaf.NotAfter,
+		DaysUntilExpiry: daysUntilExpiry,
+	}, hostnameValid
 }
 
 // performDirectTLSDetection 直接TLS检测（回退方案）
@@ -209,11 +215,12 @@ func (cts *ComprehensiveTLSStage) checkX25519Support(domain string, timeout time
 
 	// 专门做一次"仅X25519"的握手
 	x25519Config := &tls.Config{
-		ServerName:       domain,
-		CurvePreferences: []tls.CurveID{tls.X25519}, // 强制仅使用X25519
-		NextProtos:       []string{"h2", "http/1.1"},
-		MinVersion:       tls.VersionTLS13, // 确保使用TLS1.3
-		MaxVersion:       tls.VersionTLS13,
+		ServerName:         domain,
+		CurvePreferences:   []tls.CurveID{tls.X25519}, // 强制仅使用X25519
+		NextProtos:         []string{"h2", "http/1.1"},
+		MinVersion:         tls.VersionTLS13, // 确保使用TLS1.3
+		MaxVersion:         tls.VersionTLS13,
+		InsecureSkipVerify: true, // 仅探测X25519能力，证书有效性由主握手负责
 	}
 
 	conn, err := tls.DialWithDialer(&net.Dialer{

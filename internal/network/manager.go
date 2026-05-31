@@ -115,9 +115,12 @@ func (cm *ConnectionManager) GetTLSConnection(ctx context.Context, domain string
 	}
 
 	// 创建TLS连接
+	// 关闭握手层的证书校验：证书有效性由综合TLS检测器手动验证（链/有效期/主机名），
+	// 以便对"证书不可信/过期/SNI不匹配"等情况给出准确原因，而不是一律表现为握手失败。
 	tlsConn := tls.Client(tcpConn, &tls.Config{
-		ServerName: domain,
-		NextProtos: []string{"h2", "http/1.1"}, // h2优先
+		ServerName:         domain,
+		NextProtos:         []string{"h2", "http/1.1"}, // h2优先
+		InsecureSkipVerify: true,
 	})
 
 	// 执行TLS握手

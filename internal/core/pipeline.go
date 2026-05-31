@@ -206,11 +206,6 @@ func (p *Pipeline) evaluateSuitability(result *types.DetectionResult) {
 		result.Error = fmt.Errorf("不支持TLS 1.3")
 		return
 	}
-	if !result.TLS.SupportsX25519 {
-		result.Suitable = false
-		result.Error = fmt.Errorf("不支持X25519密钥交换")
-		return
-	}
 	if !result.TLS.SupportsHTTP2 {
 		result.Suitable = false
 		result.Error = fmt.Errorf("不支持HTTP/2")
@@ -232,6 +227,14 @@ func (p *Pipeline) evaluateSuitability(result *types.DetectionResult) {
 	if result.SNI == nil || !result.SNI.SupportsSNI || !result.SNI.SNIMatch {
 		result.Suitable = false
 		result.Error = fmt.Errorf("SNI不匹配")
+		return
+	}
+
+	// X25519 探测仅在上述硬性条件均满足时才会真正执行（否则被跳过、值保持 false）。
+	// 因此放在最后判断，避免在证书/SNI 等先失败时被误报为"不支持X25519"。
+	if !result.TLS.SupportsX25519 {
+		result.Suitable = false
+		result.Error = fmt.Errorf("不支持X25519密钥交换")
 		return
 	}
 
