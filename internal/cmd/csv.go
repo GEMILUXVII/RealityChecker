@@ -88,13 +88,27 @@ func extractDomainsFromCSV(records [][]string) []string {
 	var domains []string
 	domainSet := make(map[string]bool) // 用于去重
 
+	if len(records) < 1 {
+		return domains
+	}
+
+	// 从标题行按列名定位 CERT_DOMAIN 列的位置。
+	// 新版 RealiTLScanner 在 ORIGIN 与 CERT_DOMAIN 之间新增了若干列
+	// （TLS/ALPN/CURVE/CERT_LENGTH/CERT_SIGNATURE/CERT_PUBLICKEY），
+	// 使 CERT_DOMAIN 的列索引由 2 变为 8。这里按表头名称动态定位，兼容新旧格式。
+	domainIdx := findColumnIndex(records[0], "CERT_DOMAIN")
+	if domainIdx < 0 {
+		// 没有可识别的表头时，回退到旧版默认列位置（第3列）
+		domainIdx = 2
+	}
+
 	// 跳过标题行，从第二行开始处理
 	for i := 1; i < len(records); i++ {
-		if len(records[i]) < 3 {
+		if len(records[i]) <= domainIdx {
 			continue
 		}
 
-		certDomain := strings.TrimSpace(records[i][2]) // CERT_DOMAIN列
+		certDomain := strings.TrimSpace(records[i][domainIdx]) // CERT_DOMAIN列
 		if certDomain == "" {
 			continue
 		}
@@ -115,6 +129,16 @@ func extractDomainsFromCSV(records [][]string) []string {
 	}
 
 	return domains
+}
+
+// findColumnIndex 在CSV标题行中按列名查找列索引（大小写不敏感，忽略首尾引号与空白），找不到返回 -1
+func findColumnIndex(header []string, name string) int {
+	for i, col := range header {
+		if strings.EqualFold(strings.TrimSpace(strings.Trim(col, "\"")), name) {
+			return i
+		}
+	}
+	return -1
 }
 
 // shouldExcludeDomain 判断是否应该排除某个域名
