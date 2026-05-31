@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"sync"
 	"time"
 
 	"RealityChecker/internal/detectors"
@@ -123,50 +122,38 @@ func (p *Pipeline) executeStagesConcurrently(ctx context.Context, pipelineCtx *t
 		return
 	}
 
-	// 并发执行网络检测阶段
+	// 顺序执行网络检测阶段
 	if len(networkStages) > 0 {
-		p.executeNetworkStagesConcurrently(ctx, pipelineCtx, networkStages)
+		p.executeNetworkStages(ctx, pipelineCtx, networkStages)
 	}
 }
 
-// executeNetworkStagesConcurrently 并发执行网络检测阶段
-func (p *Pipeline) executeNetworkStagesConcurrently(ctx context.Context, pipelineCtx *types.PipelineContext, stages []types.DetectionStage) {
-	// 使用信号量控制网络检测的并发数
-	networkConcurrency := 4 // 网络检测使用4个并发
-	semaphore := make(chan struct{}, networkConcurrency)
+// executeNetworkStages 按优先级顺序串行执行网络检测阶段。
+// 这些阶段（综合TLS、热门网站）会写入同一个 Result 上的共享字段（尤其是 CDN），
+// 且热门网站检测依赖 TLS 阶段产出的 CDN 结果（优先级更低、应在其之后），
+// 因此必须串行执行：既消除并发写 Result 造成的数据竞争，又保证依赖顺序正确。
+// 网络阶段数量很少且其中仅 TLS 涉及网络 I/O，串行几乎不影响整体耗时。
+func (p *Pipeline) executeNetworkStages(ctx context.Context, pipelineCtx *types.PipelineContext, stages []types.DetectionStage) {
+	for _, stage := range stages {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 
-	var wg sync.WaitGroup
-	for i, stage := range stages {
-		wg.Add(1)
-		go func(index int, s types.DetectionStage) {
-			defer wg.Done()
-
-			// 获取信号量
-			select {
-			case semaphore <- struct{}{}:
-				defer func() {
-					<-semaphore
-				}()
-			case <-ctx.Done():
-				return
-			}
-
-			// 执行检测阶段
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						pipelineCtx.Result.Error = fmt.Errorf("检测阶段 %s panic: %v", s.Name(), r)
-					}
-				}()
-
-				if err := s.Execute(pipelineCtx); err != nil {
-					pipelineCtx.Result.Error = err
+		s := stage
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					pipelineCtx.Result.Error = fmt.Errorf("检测阶段 %s panic: %v", s.Name(), r)
 				}
 			}()
-		}(i, stage)
-	}
 
-	wg.Wait()
+			if err := s.Execute(pipelineCtx); err != nil {
+				pipelineCtx.Result.Error = err
+			}
+		}()
+	}
 }
 
 // evaluateSuitability 评估适合性
