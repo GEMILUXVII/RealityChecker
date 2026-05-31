@@ -56,76 +56,14 @@ func loadConfigFromFile(config *types.Config, filePath string) error {
 		return fmt.Errorf("读取配置文件失败: %v", err)
 	}
 
-	// 解析YAML
-	var fileConfig types.Config
-	if err := yaml.Unmarshal(data, &fileConfig); err != nil {
+	// 直接把文件内容反序列化到已填入默认值的配置上。
+	// yaml.v3 只会覆盖文件中实际出现的字段，未出现的字段保留默认值，
+	// 从而正确区分"未设置"与"显式零值"，避免布尔项、Retries 等默认值被零值覆盖。
+	if err := yaml.Unmarshal(data, config); err != nil {
 		return fmt.Errorf("解析配置文件失败: %v", err)
 	}
 
-	// 合并配置（文件配置覆盖默认配置）
-	mergeConfig(config, &fileConfig)
-
 	return nil
-}
-
-// mergeConfig 合并配置
-func mergeConfig(defaultConfig *types.Config, fileConfig *types.Config) {
-	// 网络配置
-	if fileConfig.Network.Timeout > 0 {
-		defaultConfig.Network.Timeout = fileConfig.Network.Timeout
-	}
-	if fileConfig.Network.Retries >= 0 {
-		defaultConfig.Network.Retries = fileConfig.Network.Retries
-	}
-	if len(fileConfig.Network.DNSServers) > 0 {
-		defaultConfig.Network.DNSServers = fileConfig.Network.DNSServers
-	}
-
-	// TLS配置
-	if fileConfig.TLS.MinVersion > 0 {
-		defaultConfig.TLS.MinVersion = fileConfig.TLS.MinVersion
-	}
-	if fileConfig.TLS.MaxVersion > 0 {
-		defaultConfig.TLS.MaxVersion = fileConfig.TLS.MaxVersion
-	}
-
-	// 并发配置
-	if fileConfig.Concurrency.MaxConcurrent > 0 {
-		defaultConfig.Concurrency.MaxConcurrent = fileConfig.Concurrency.MaxConcurrent
-	}
-	if fileConfig.Concurrency.CheckTimeout > 0 {
-		defaultConfig.Concurrency.CheckTimeout = fileConfig.Concurrency.CheckTimeout
-	}
-	if fileConfig.Concurrency.CacheTTL > 0 {
-		defaultConfig.Concurrency.CacheTTL = fileConfig.Concurrency.CacheTTL
-	}
-
-	// 输出配置
-	if fileConfig.Output.Format != "" {
-		defaultConfig.Output.Format = fileConfig.Output.Format
-	}
-	defaultConfig.Output.Color = fileConfig.Output.Color
-	defaultConfig.Output.Verbose = fileConfig.Output.Verbose
-
-	// 缓存配置
-	defaultConfig.Cache.DNSEnabled = fileConfig.Cache.DNSEnabled
-	defaultConfig.Cache.ResultEnabled = fileConfig.Cache.ResultEnabled
-	if fileConfig.Cache.TTL > 0 {
-		defaultConfig.Cache.TTL = fileConfig.Cache.TTL
-	}
-	if fileConfig.Cache.MaxSize > 0 {
-		defaultConfig.Cache.MaxSize = fileConfig.Cache.MaxSize
-	}
-
-	// 批量配置
-	defaultConfig.Batch.StreamOutput = fileConfig.Batch.StreamOutput
-	defaultConfig.Batch.ProgressBar = fileConfig.Batch.ProgressBar
-	if fileConfig.Batch.ReportFormat != "" {
-		defaultConfig.Batch.ReportFormat = fileConfig.Batch.ReportFormat
-	}
-	if fileConfig.Batch.Timeout > 0 {
-		defaultConfig.Batch.Timeout = fileConfig.Batch.Timeout
-	}
 }
 
 // getDefaultConfig 获取默认配置
