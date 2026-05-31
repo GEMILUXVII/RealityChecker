@@ -381,7 +381,7 @@ func (cs *CDNStage) CanEarlyExit() bool {
 
 // Priority 优先级
 func (cs *CDNStage) Priority() int {
-	return 8 // CDN检测第八优先级 - 信息性检测
+	return 9 // CDN检测（已合并进综合TLS阶段，未单独加入流水线）
 }
 
 // Name 阶段名称

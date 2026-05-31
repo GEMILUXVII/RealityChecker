@@ -108,7 +108,7 @@ func (ls *LocationStage) CanEarlyExit() bool {
 
 // Priority 优先级
 func (ls *LocationStage) Priority() int {
-	return 4 // 地理位置检测第四优先级
+	return 5 // 地理位置检测（在IP解析之后）
 }
 
 // Name 阶段名称

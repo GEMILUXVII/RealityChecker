@@ -142,7 +142,7 @@ func (hws *HotWebsiteStage) CanEarlyExit() bool {
 
 // Priority 优先级
 func (hws *HotWebsiteStage) Priority() int {
-	return 9 // 热门网站检测在CDN检测之后 - 需要CDN结果
+	return 8 // 热门网站检测在综合TLS检测之后 - 需要其产出的CDN结果
 }
 
 // Name 阶段名称

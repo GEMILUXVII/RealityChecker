@@ -101,7 +101,7 @@ func (irs *IPResolverStage) CanEarlyExit() bool {
 
 // Priority 优先级
 func (irs *IPResolverStage) Priority() int {
-	return 3 // IP解析第三优先级
+	return 4 // IP解析（在状态码检查之后）
 }
 
 // Name 阶段名称

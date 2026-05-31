@@ -36,7 +36,7 @@ func (lcs *LocationCheckStage) CanEarlyExit() bool {
 
 // Priority 优先级
 func (lcs *LocationCheckStage) Priority() int {
-	return 5 // 地理位置检查第五优先级（在IP解析之后）
+	return 6 // 地理位置检查（在地理位置检测之后）
 }
 
 // Name 阶段名称
