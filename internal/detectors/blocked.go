@@ -43,19 +43,21 @@ func (bs *BlockedStage) Execute(ctx *types.PipelineContext) error {
 
 // checkBlocked 检查是否被墙
 func (bs *BlockedStage) checkBlocked(domain string) (bool, string) {
-	domain = strings.ToLower(domain)
+	domain = strings.ToLower(strings.TrimSuffix(domain, "."))
 
-	// 检查GFWList
+	// 精确匹配
 	if bs.gfwlist[domain] {
 		return true, "仅参考黑名单"
 	}
 
-	// 检查通配符匹配
+	// 父域匹配：黑名单条目以裸域名形式存储（loadGFWList 已剥离 "+." 前缀），
+	// 因此应逐级用父域名查找，使 www.google.com 能命中条目 google.com。
+	// 从去掉最左标签开始，到最后一个单标签（TLD）之前为止，避免按裸 TLD 误匹配。
 	parts := strings.Split(domain, ".")
-	for i := 0; i < len(parts); i++ {
-		wildcard := "*." + strings.Join(parts[i:], ".")
-		if bs.gfwlist[wildcard] {
-			return true, fmt.Sprintf("通配符匹配: %s", wildcard)
+	for i := 1; i < len(parts)-1; i++ {
+		parent := strings.Join(parts[i:], ".")
+		if bs.gfwlist[parent] {
+			return true, fmt.Sprintf("父域匹配: %s", parent)
 		}
 	}
 
