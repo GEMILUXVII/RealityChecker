@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 
-	"RealityChecker/internal/config"
 	"RealityChecker/internal/report"
 	"RealityChecker/internal/ui"
 )
@@ -35,9 +34,8 @@ func (r *RootCmd) executeCheck(domain string) {
 		return
 	}
 
-	// 使用格式化器输出结果
-	cfg, _ := config.LoadConfig("")
-	formatter := report.NewFormatter(cfg)
+	// 使用格式化器输出结果（复用已加载的配置）
+	formatter := report.NewFormatter(r.config)
 	fmt.Printf("\n%s", formatter.FormatSingleResult(result))
 
 	// 显示广告

@@ -11,6 +11,7 @@ import (
 	"RealityChecker/internal/batch"
 	"RealityChecker/internal/config"
 	"RealityChecker/internal/core"
+	"RealityChecker/internal/types"
 	"RealityChecker/internal/ui"
 	"RealityChecker/internal/version"
 )
@@ -19,6 +20,7 @@ import (
 type RootCmd struct {
 	engine       *core.Engine
 	batchManager *batch.Manager
+	config       *types.Config
 	ctx          context.Context
 	cancel       context.CancelFunc
 }
@@ -56,6 +58,7 @@ func NewRootCmd() (*RootCmd, error) {
 	return &RootCmd{
 		engine:       engine,
 		batchManager: batchManager,
+		config:       cfg,
 		ctx:          ctx,
 		cancel:       cancel,
 	}, nil
