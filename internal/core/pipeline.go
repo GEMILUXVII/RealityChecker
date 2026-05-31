@@ -191,47 +191,54 @@ func (p *Pipeline) evaluateSuitability(result *types.DetectionResult) {
 		}
 	}
 
-	if result.TLS != nil {
-		if !result.TLS.SupportsTLS13 {
-			result.Suitable = false
-			result.Error = fmt.Errorf("不支持TLS 1.3")
-			return
+	// TLS 相关硬性条件必须有实际检测结果才能判定为适合。
+	// 若因早期退出或网络阶段异常导致未执行 TLS 检测（result.TLS 为 nil），
+	// 不能仅因为"没有检测到失败"就判为适合，否则会产生假阳性。
+	if result.TLS == nil {
+		result.Suitable = false
+		if result.Error == nil {
+			result.Error = fmt.Errorf("未完成TLS检测")
 		}
-		if !result.TLS.SupportsX25519 {
-			result.Suitable = false
-			result.Error = fmt.Errorf("不支持X25519密钥交换")
-			return
-		}
-		if !result.TLS.SupportsHTTP2 {
-			result.Suitable = false
-			result.Error = fmt.Errorf("不支持HTTP/2")
-			return
-		}
+		return
+	}
+	if !result.TLS.SupportsTLS13 {
+		result.Suitable = false
+		result.Error = fmt.Errorf("不支持TLS 1.3")
+		return
+	}
+	if !result.TLS.SupportsX25519 {
+		result.Suitable = false
+		result.Error = fmt.Errorf("不支持X25519密钥交换")
+		return
+	}
+	if !result.TLS.SupportsHTTP2 {
+		result.Suitable = false
+		result.Error = fmt.Errorf("不支持HTTP/2")
+		return
 	}
 
-	if result.Certificate != nil {
-		if !result.Certificate.Valid {
-			result.Suitable = false
-			result.Error = fmt.Errorf("证书无效")
-			return
-		}
-		// 只有真正过期的证书才标记为不适合（天数小于等于0）
-		if result.Certificate.DaysUntilExpiry <= 0 {
-			result.Suitable = false
-			result.Error = fmt.Errorf("证书已过期（%d天）", result.Certificate.DaysUntilExpiry)
-			return
-		}
+	if result.Certificate == nil || !result.Certificate.Valid {
+		result.Suitable = false
+		result.Error = fmt.Errorf("证书无效")
+		return
+	}
+	// 只有真正过期的证书才标记为不适合（天数小于等于0）
+	if result.Certificate.DaysUntilExpiry <= 0 {
+		result.Suitable = false
+		result.Error = fmt.Errorf("证书已过期（%d天）", result.Certificate.DaysUntilExpiry)
+		return
 	}
 
-	if result.SNI != nil && (!result.SNI.SupportsSNI || !result.SNI.SNIMatch) {
+	if result.SNI == nil || !result.SNI.SupportsSNI || !result.SNI.SNIMatch {
 		result.Suitable = false
 		result.Error = fmt.Errorf("SNI不匹配")
 		return
 	}
 
-	// 所有硬性条件都符合
+	// 所有硬性条件都符合，清除早期阶段可能残留的非致命错误
 	result.Suitable = true
 	result.HardRequirementsMet = true
+	result.Error = nil
 }
 
 // SetEarlyExit 设置是否早期退出
