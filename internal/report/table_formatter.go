@@ -265,12 +265,6 @@ func (tf *TableFormatter) calculateRecommendationStars(result *types.DetectionRe
 	return starsText
 }
 
-// isEarlyExit 判断是否早期退出（未完成所有检测）
-func (tf *TableFormatter) isEarlyExit(result *types.DetectionResult) bool {
-	// 直接使用EarlyExit标志
-	return result.EarlyExit
-}
-
 // isDetectorExecuted 判断某个检测器是否被执行了
 func (tf *TableFormatter) isDetectorExecuted(result *types.DetectionResult, detectorType string) bool {
 	// 如果早期退出，需要根据退出原因判断哪些检测器被执行了

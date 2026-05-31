@@ -108,50 +108,6 @@ func (e *Engine) CheckDomains(ctx context.Context, domains []string) ([]*types.D
 	return results, nil
 }
 
-// CheckDomainsStream 流式批量检测域名
-func (e *Engine) CheckDomainsStream(ctx context.Context, domains []string) (<-chan *types.DetectionResult, error) {
-	if !e.running {
-		return nil, fmt.Errorf("引擎未运行")
-	}
-
-	resultChan := make(chan *types.DetectionResult, len(domains))
-
-	go func() {
-		defer close(resultChan)
-
-		semaphore := make(chan struct{}, int(e.config.Concurrency.MaxConcurrent))
-		var wg sync.WaitGroup
-
-		for _, domain := range domains {
-			wg.Add(1)
-			go func(domain string) {
-				defer wg.Done()
-
-				semaphore <- struct{}{}
-				defer func() { <-semaphore }()
-
-				result, err := e.pipeline.Execute(ctx, domain)
-				if err != nil {
-					result = &types.DetectionResult{
-						Domain: domain,
-						Error:  err,
-					}
-				}
-
-				select {
-				case resultChan <- result:
-				case <-ctx.Done():
-					return
-				}
-			}(domain)
-		}
-
-		wg.Wait()
-	}()
-
-	return resultChan, nil
-}
-
 // GetStats 获取引擎统计信息（简化版本）
 func (e *Engine) GetStats() *EngineStats {
 	e.mu.RLock()

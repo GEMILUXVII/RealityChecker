@@ -222,15 +222,6 @@ type ProgressResult struct {
 	Error  error
 }
 
-// CheckDomainsStream 流式批量检测域名
-func (bm *Manager) CheckDomainsStream(ctx context.Context, domains []string) (<-chan *types.DetectionResult, error) {
-	if !bm.running {
-		return nil, fmt.Errorf("批量管理器未运行")
-	}
-
-	return bm.engine.CheckDomainsStream(ctx, domains)
-}
-
 // generateBatchReport 生成批量报告
 func (bm *Manager) generateBatchReport(results []*types.DetectionResult, startTime, endTime time.Time) *types.BatchReport {
 	stats := &types.Statistics{
@@ -368,22 +359,6 @@ func (bm *Manager) formatExcludedDomains(excludedResults []*types.DetectionResul
 	}
 
 	return result.String()
-}
-
-// calculateOptimalConcurrency 计算最优并发数
-func (bm *Manager) calculateOptimalConcurrency(domainCount int) int {
-	// 更激进的并发策略，提高检测效率
-	if domainCount <= 5 {
-		return domainCount // 小批量：每个域名一个并发
-	} else if domainCount <= 20 {
-		return 6 // 中小批量：6个并发
-	} else if domainCount <= 50 {
-		return 8 // 中批量：8个并发
-	} else if domainCount <= 100 {
-		return 10 // 大批量：10个并发
-	} else {
-		return 12 // 超大批量：最多12个并发
-	}
 }
 
 // batchTimeout 根据域名数量与并发数估算整个批次的总超时时间。
