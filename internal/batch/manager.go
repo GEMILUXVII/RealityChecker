@@ -165,7 +165,8 @@ func (bm *Manager) CheckDomainsWithProgress(ctx context.Context, domains []strin
 
 	// 收集结果并显示进度
 	completed := 0
-	timeout := time.NewTimer(15 * time.Second) // 添加15秒总超时
+	// 总超时按域名数量伸缩：原先固定 15s 会导致较大的 CSV 批次绝大多数域名被误判为超时。
+	timeout := time.NewTimer(batchTimeout(len(domains), bm.config.Concurrency.MaxConcurrent))
 	defer timeout.Stop()
 
 	for completed < len(domains) {
@@ -383,6 +384,23 @@ func (bm *Manager) calculateOptimalConcurrency(domainCount int) int {
 	} else {
 		return 12 // 超大批量：最多12个并发
 	}
+}
+
+// batchTimeout 根据域名数量与并发数估算整个批次的总超时时间。
+// 单域名各检测阶段的超时之和有一个保守上界，按并发向上取整得到批数，
+// 再乘以单域名预算并加上固定缓冲，避免大批量 CSV 被固定超时过早截断。
+func batchTimeout(domainCount, concurrency int) time.Duration {
+	const perDomainBudget = 12 * time.Second
+	const baseBuffer = 30 * time.Second
+
+	if concurrency <= 0 {
+		concurrency = 8
+	}
+	batches := (domainCount + concurrency - 1) / concurrency
+	if batches < 1 {
+		batches = 1
+	}
+	return time.Duration(batches)*perDomainBudget + baseBuffer
 }
 
 // formatDuration 格式化时间显示
