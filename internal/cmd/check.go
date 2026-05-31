@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"net"
 	"regexp"
 	"strings"
 
@@ -73,13 +72,8 @@ func isValidDomain(domain string) bool {
 		return false
 	}
 
-	// 尝试解析域名（不进行实际DNS查询）
-	_, err := net.LookupHost(domain)
-	if err != nil {
-		// 即使DNS解析失败，只要格式正确就认为是有效的
-		// 因为可能是网络问题或域名确实不存在
-		return true
-	}
-
+	// 格式校验通过即认为有效。
+	// 不再做 DNS 解析：之前的 net.LookupHost 结果被直接丢弃（两个分支都 return true），
+	// 只会为每个域名平添一次阻塞 DNS 查询；真正的解析在后续检测阶段进行。
 	return true
 }
