@@ -58,7 +58,6 @@ func (cts *ComprehensiveTLSStage) performComprehensiveTLSDetection(ctx *types.Pi
 	// 获取连接管理器
 	connMgr, ok := ctx.Connections.(interface {
 		GetTLSConnection(context.Context, string) (*tls.Conn, error)
-		GetX25519TLSConnection(context.Context, string) (*tls.Conn, error)
 		CloseTLSConnection(*tls.Conn)
 	})
 	if !ok {
