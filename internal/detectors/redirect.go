@@ -151,6 +151,7 @@ func (rs *RedirectStage) followRedirects(client *http.Client, domain string) *Re
 						result.RedirectChain = append(result.RedirectChain, newDomain)
 						result.IsRedirected = true
 						result.RedirectCount++
+						result.FinalDomain = newDomain // 同步更新，确保达到跳转上限退出时仍正确
 						currentURL = location
 						domain = newDomain
 						resp.Body.Close()
