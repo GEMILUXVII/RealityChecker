@@ -24,10 +24,17 @@ func NewLocationStage() *LocationStage {
 // Execute 执行地理位置检测
 func (ls *LocationStage) Execute(ctx *types.PipelineContext) error {
 
-	// 解析IP地址
-	ip, err := ls.resolveIP(ctx.Domain)
-	if err != nil {
-		return fmt.Errorf("IP解析失败: %v", err)
+	// 复用 IP 解析阶段（优先级更高，已先执行）解析出的 IP，避免重复 DNS 查询；
+	// 仅在尚未解析时才自行解析。
+	var ip string
+	if ctx.Result.Location != nil && ctx.Result.Location.IPAddress != "" {
+		ip = ctx.Result.Location.IPAddress
+	} else {
+		resolved, err := ls.resolveIP(ctx.Domain)
+		if err != nil {
+			return fmt.Errorf("IP解析失败: %v", err)
+		}
+		ip = resolved
 	}
 
 	// 获取地理位置
