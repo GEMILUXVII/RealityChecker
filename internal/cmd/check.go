@@ -37,9 +37,6 @@ func (r *RootCmd) executeCheck(domain string) {
 	// 使用格式化器输出结果（复用已加载的配置）
 	formatter := report.NewFormatter(r.config)
 	fmt.Printf("\n%s", formatter.FormatSingleResult(result))
-
-	// 显示广告
-	ui.PrintAdvertisement()
 }
 
 // isValidDomain 验证域名格式是否有效
