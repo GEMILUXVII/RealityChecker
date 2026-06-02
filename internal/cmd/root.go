@@ -123,7 +123,7 @@ func (r *RootCmd) showVersion() {
 	fmt.Printf("版本: %s\n", version.GetVersion())
 	fmt.Printf("提交: %s\n", version.GetCommit())
 	fmt.Printf("构建时间: %s\n", version.GetBuildTime())
-	fmt.Printf("GitHub: https://github.com/V2RaySSR/RealityChecker\n")
+	fmt.Printf("GitHub: https://github.com/GEMILUXVII/RealityChecker\n")
 }
 
 // cleanup 清理资源

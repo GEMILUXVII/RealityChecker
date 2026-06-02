@@ -64,14 +64,14 @@
 
 **方法1：直接下载（推荐）**
 
-从 [Releases](https://github.com/V2RaySSR/RealityChecker/releases) 页面下载对应架构的zip文件：
+从 [Releases](https://github.com/GEMILUXVII/RealityChecker/releases) 页面下载对应架构的zip文件：
 
 ```bash
 # Linux x86_64
-wget https://github.com/V2RaySSR/RealityChecker/releases/latest/download/reality-checker-linux-amd64.zip
+wget https://github.com/GEMILUXVII/RealityChecker/releases/latest/download/reality-checker-linux-amd64.zip
 
 # Linux ARM64
-wget https://github.com/V2RaySSR/RealityChecker/releases/latest/download/reality-checker-linux-arm64.zip
+wget https://github.com/GEMILUXVII/RealityChecker/releases/latest/download/reality-checker-linux-arm64.zip
 ```
 
 解压后直接使用：
@@ -90,7 +90,7 @@ chmod +x reality-checker
 
 ```bash
 # 克隆项目
-git clone https://github.com/V2RaySSR/RealityChecker.git
+git clone https://github.com/GEMILUXVII/RealityChecker.git
 cd RealityChecker
 
 # 编译程序
@@ -160,8 +160,8 @@ go build -o reality-checker
 
 - [Country.mmdb](https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb)
 - [gfwlist.conf](https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/gfw.txt)
-- [cdn_keywords.txt](https://raw.githubusercontent.com/V2RaySSR/RealityChecker/main/data/cdn_keywords.txt)
-- [hot_websites.txt](https://raw.githubusercontent.com/V2RaySSR/RealityChecker/main/data/hot_websites.txt)
+- [cdn_keywords.txt](https://raw.githubusercontent.com/GEMILUXVII/RealityChecker/main/data/cdn_keywords.txt)
+- [hot_websites.txt](https://raw.githubusercontent.com/GEMILUXVII/RealityChecker/main/data/hot_websites.txt)
 
 
 ## 🏆 致谢
