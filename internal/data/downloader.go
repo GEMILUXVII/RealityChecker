@@ -82,34 +82,19 @@ func (d *Downloader) EnsureDataFiles() error {
 	return nil
 }
 
-// ensureFile 确保单个文件存在且最新
+// ensureFile 仅在数据文件缺失时下载。
+// 数据的定期刷新交由 CI 每 3 天构建的 data-latest release 负责，
+// 运行环境（常为墙内 VPS、难以直连 GitHub）不再做定期联网更新，
+// 已存在的文件一律保持不动。
 func (d *Downloader) ensureFile(file DataFile) error {
-	// 检查文件是否存在
 	exists, err := d.fileExists(file.LocalPath)
 	if err != nil {
 		return fmt.Errorf("检查文件 %s 失败: %v", file.Name, err)
 	}
 
-	// 文件不存在：必须下载成功，否则缺少数据无法工作
 	if !exists {
 		printTimestampedMessage("下载 %s...", file.Name)
 		return d.downloadWithRetry(file)
-	}
-
-	// 文件已存在但可能过期（超过3天）：尝试更新，但即使更新失败也继续使用现有文件。
-	// 这样可避免服务器在无法访问下载源（例如墙内无法直连 GitHub）时，
-	// 仅仅因为数据文件过期就启动失败。
-	needsUpdate, err := d.needsUpdate(file.LocalPath)
-	if err != nil {
-		// 无法判断是否过期，但文件已存在，继续使用
-		return nil
-	}
-
-	if needsUpdate {
-		printTimestampedMessage("更新 %s...", file.Name)
-		if err := d.downloadFile(file); err != nil {
-			printTimestampedMessage("更新 %s 失败，继续使用现有文件: %v", file.Name, err)
-		}
 	}
 
 	return nil
@@ -125,18 +110,6 @@ func (d *Downloader) fileExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
-}
-
-// needsUpdate 检查文件是否需要更新（超过3天）
-func (d *Downloader) needsUpdate(path string) (bool, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false, err
-	}
-
-	// 检查文件修改时间是否超过3天
-	threeDaysAgo := time.Now().Add(-3 * 24 * time.Hour)
-	return info.ModTime().Before(threeDaysAgo), nil
 }
 
 // downloadWithRetry 带重试的下载

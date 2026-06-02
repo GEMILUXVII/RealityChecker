@@ -7,25 +7,26 @@ import (
 	"time"
 )
 
-// 下载源不可达时：已存在但过期的文件应被保留并继续使用，而不是导致启动失败。
-func TestEnsureFileKeepsStaleFileWhenDownloadFails(t *testing.T) {
+// 文件已存在时不再触发任何下载（数据刷新交由 CI 的 data-latest release），
+// 即使文件较旧也保持原样、不被覆盖。
+func TestEnsureFileSkipsExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "data.txt")
 	if err := os.WriteFile(path, []byte("existing"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	// 把修改时间设为 4 天前 → 视为过期
-	old := time.Now().Add(-4 * 24 * time.Hour)
+	// 即使把修改时间设为 30 天前，已存在的文件也不应被重新下载
+	old := time.Now().Add(-30 * 24 * time.Hour)
 	if err := os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
 
 	d := &Downloader{timeout: 2 * time.Second, retries: 1, retryDelay: 0}
-	// 指向一个会立即连接失败的地址（本地保留端口），不触发外部网络
+	// URL 指向会立即失败的地址：若被错误地触发下载会报错，但文件已存在就不该触发
 	file := DataFile{Name: "data.txt", URL: "http://127.0.0.1:1/nope", LocalPath: path}
 
 	if err := d.ensureFile(file); err != nil {
-		t.Fatalf("过期文件 + 下载失败不应返回错误，得到: %v", err)
+		t.Fatalf("已存在的文件不应触发下载，得到错误: %v", err)
 	}
 
 	b, err := os.ReadFile(path)
