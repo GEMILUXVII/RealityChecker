@@ -1,0 +1,74 @@
+name: Data Snapshot
+
+# 每 3 天拉取最新数据（gfwlist、Country.mmdb），构建并发布到滚动 release data-latest。
+# 数据刷新放在 CI（可自由访问 GitHub）完成，运行环境（常为墙内 VPS）只需下载、无需联网更新。
+on:
+  schedule:
+    # 约每 3 天 UTC 02:00。GitHub cron 无法精确锚定固定间隔，月末（如 31→1）会略有偏移。
+    - cron: '0 2 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+
+    - name: Refresh data files from upstream
+      run: |
+        mkdir -p data
+        # gfwlist（Loyalsoldier/clash-rules，近乎每日更新）
+        curl -fsSL -o data/gfwlist.conf https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/gfw.txt
+        # Country.mmdb（Loyalsoldier/geoip 最新 release）
+        curl -fsSL -o data/Country.mmdb https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb
+        # cdn_keywords.txt / hot_websites.txt 跟随本仓库（checkout 已带），无需额外拉取
+        ls -la data/
+
+    - name: Build for multiple platforms
+      run: |
+        mkdir -p dist
+        VERSION="data-$(date -u +%Y.%m.%d)"
+        COMMIT=$(git rev-parse --short HEAD)
+        BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        LDFLAGS="-X RealityChecker/internal/version.Version=$VERSION -X RealityChecker/internal/version.Commit=$COMMIT -X RealityChecker/internal/version.BuildTime=$BUILD_TIME -s -w"
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -tags netgo -installsuffix netgo -o reality-checker .
+        chmod +x reality-checker
+        zip -r dist/reality-checker-linux-amd64.zip reality-checker data/
+        rm reality-checker
+
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -tags netgo -installsuffix netgo -o reality-checker .
+        chmod +x reality-checker
+        zip -r dist/reality-checker-linux-arm64.zip reality-checker data/
+        rm reality-checker
+
+        ls -la dist/
+
+    - name: Publish rolling data release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: data-latest
+        name: 数据快照（自动更新）
+        body: |
+          每 3 天自动构建，内置最新数据文件（gfwlist、Country.mmdb）。
+          程序代码与正式版相同，仅数据保持最新。
+
+          **下载（地址固定，始终最新）：**
+          - `reality-checker-linux-amd64.zip` - Linux x86_64
+          - `reality-checker-linux-arm64.zip` - Linux ARM64
+
+          解压即用，运行时无需联网下载数据。
+        files: dist/*
+        make_latest: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
