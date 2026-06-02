@@ -1,0 +1,165 @@
+name: Release
+
+# 统一发布（单一滚动 Latest）：
+# - push v* tag        → 发版：拉最新数据 + 编译最新代码，刷新滚动 latest（GitHub Latest），并额外存一份 vX.Y.Z 永久归档
+# - 每 3 天 cron / 手动 → 仅刷新滚动 latest 的数据与构建（程序版本沿用最近的 tag）
+# 数据在 CI（可自由访问 GitHub）构建时拉取，运行环境（常为墙内 VPS）下载即用、无需联网。
+on:
+  push:
+    tags:
+      - 'v*'
+  schedule:
+    # 约每 3 天 UTC 02:00。GitHub cron 无法精确锚定固定间隔，月末（如 31→1）会略有偏移。
+    - cron: '0 2 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0   # 需要完整历史与 tag，cron/手动触发时 git describe 才能取到最近版本号
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 'stable'
+
+    - name: Refresh data files from upstream
+      run: |
+        mkdir -p data
+        # gfwlist（Loyalsoldier/clash-rules，近乎每日更新）
+        curl -fsSL -o data/gfwlist.conf https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/gfw.txt
+        # Country.mmdb（Loyalsoldier/geoip 最新 release）
+        curl -fsSL -o data/Country.mmdb https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb
+        # cdn_keywords.txt / hot_websites.txt 跟随本仓库（checkout 已带），无需额外拉取
+        ls -la data/
+
+    - name: Determine version
+      id: version
+      run: |
+        if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          VERSION="${GITHUB_REF#refs/tags/}"      # 发版：版本号取 tag
+          IS_TAG="true"
+        else
+          VERSION="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)"  # 定时/手动：取最近 tag
+          IS_TAG="false"
+        fi
+        DATA_DATE="$(date -u +%Y.%m.%d)"
+        echo "version=$VERSION"   >> "$GITHUB_OUTPUT"
+        echo "is_tag=$IS_TAG"     >> "$GITHUB_OUTPUT"
+        echo "data_date=$DATA_DATE" >> "$GITHUB_OUTPUT"
+        echo "Building version=$VERSION (tag=$IS_TAG), data=$DATA_DATE"
+
+    - name: Build for multiple platforms
+      run: |
+        mkdir -p dist
+        VERSION="${{ steps.version.outputs.version }}"
+        COMMIT="$(git rev-parse --short HEAD)"
+        BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        LDFLAGS="-X RealityChecker/internal/version.Version=$VERSION -X RealityChecker/internal/version.Commit=$COMMIT -X RealityChecker/internal/version.BuildTime=$BUILD_TIME -s -w"
+
+        # Linux AMD64 - 静态编译（CGO_ENABLED=0 + netgo，规避 GLIBC 兼容问题）
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -tags netgo -installsuffix netgo -o reality-checker .
+        chmod +x reality-checker
+        zip -r dist/reality-checker-linux-amd64.zip reality-checker data/
+        rm reality-checker
+
+        # Linux ARM64 - 静态编译
+        CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -tags netgo -installsuffix netgo -o reality-checker .
+        chmod +x reality-checker
+        zip -r dist/reality-checker-linux-arm64.zip reality-checker data/
+        rm reality-checker
+
+        ls -la dist/
+
+    # 1) 始终刷新滚动 latest —— 这是 GitHub Latest 入口：最新程序 + 最新数据
+    - name: Publish rolling latest release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: latest
+        name: 最新版 ${{ steps.version.outputs.version }}（数据 ${{ steps.version.outputs.data_date }}）
+        body: |
+          **始终保持最新**：程序为最近发布版本的代码，数据每 3 天自动刷新（gfwlist、Country.mmdb）。
+          解压即用，运行时无需联网下载数据。
+
+          - 程序版本：`${{ steps.version.outputs.version }}`
+          - 数据快照：`${{ steps.version.outputs.data_date }}`
+
+          **下载（地址固定，始终指向最新）：**
+          ```bash
+          # x86_64
+          wget https://github.com/GEMILUXVII/RealityChecker/releases/latest/download/reality-checker-linux-amd64.zip
+          # ARM64
+          wget https://github.com/GEMILUXVII/RealityChecker/releases/latest/download/reality-checker-linux-arm64.zip
+
+          unzip reality-checker-linux-amd64.zip
+          chmod +x reality-checker
+          ./reality-checker check example.com
+          ./reality-checker csv file.csv
+          ```
+        files: dist/*
+        make_latest: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # 2) 仅在打 v* tag 时，额外发布该版本的永久归档（不抢 Latest 标记）
+    - name: Publish version archive release
+      if: steps.version.outputs.is_tag == 'true'
+      uses: softprops/action-gh-release@v2
+      with:
+        # 不指定 tag_name：沿用本次 push 的 v* tag
+        name: Reality 协议目标网站检测工具 ${{ steps.version.outputs.version }}
+        body: |
+          ## Reality 协议目标网站检测工具 ${{ steps.version.outputs.version }}
+
+          > 想始终获取“最新程序 + 最新数据”，请到 [**latest**](https://github.com/GEMILUXVII/RealityChecker/releases/latest) 下载。
+          > 本页为 `${{ steps.version.outputs.version }}` 的永久归档（数据为发版当时 ${{ steps.version.outputs.data_date }}）。
+
+          **下载说明：**（已内置 data/ 数据文件，解压即用）
+          - `reality-checker-linux-amd64.zip` - Linux x86_64
+          - `reality-checker-linux-arm64.zip` - Linux ARM64
+
+          **基本命令：**
+          ```bash
+          # 单域名检测
+          ./reality-checker check example.com
+
+          # 批量检测
+          ./reality-checker batch domain1 domain2 domain3
+
+          # CSV 文件检测
+          ./reality-checker csv domains.csv
+          ```
+
+          **推荐工作流程：**
+          1. 使用 [RealiTLScanner](https://github.com/XTLS/RealiTLScanner) 在本地扫描 VPS IP：
+             ```bash
+             ./RealiTLScanner -addr <VPS IP> -port 443 -thread 100 -timeout 5 -out file.csv
+             ```
+          2. 使用本工具检测生成的 CSV 文件：
+             ```bash
+             ./reality-checker csv file.csv
+             ```
+
+          **重要提示：**
+          - RealiTLScanner 尽量在本地运行，不要在远端
+          - 多次运行 RealiTLScanner 时请更改输出文件名（file1.csv、file2.csv …），避免覆盖之前的扫描结果
+
+          ### 版本信息
+          - **版本**: ${{ steps.version.outputs.version }}
+          - **提交**: ${{ github.sha }}
+
+          ---
+          **注意**：本工具仅用于技术研究和学习目的，请遵守当地法律法规。
+        make_latest: false
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
