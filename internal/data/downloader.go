@@ -46,12 +46,12 @@ func (d *Downloader) EnsureDataFiles() error {
 	files := []DataFile{
 		{
 			Name:      "cdn_keywords.txt",
-			URL:       "https://raw.githubusercontent.com/V2RaySSR/RealityChecker/main/data/cdn_keywords.txt",
+			URL:       "https://raw.githubusercontent.com/GEMILUXVII/RealityChecker/main/data/cdn_keywords.txt",
 			LocalPath: "data/cdn_keywords.txt",
 		},
 		{
 			Name:      "hot_websites.txt",
-			URL:       "https://raw.githubusercontent.com/V2RaySSR/RealityChecker/main/data/hot_websites.txt",
+			URL:       "https://raw.githubusercontent.com/GEMILUXVII/RealityChecker/main/data/hot_websites.txt",
 			LocalPath: "data/hot_websites.txt",
 		},
 		{
@@ -90,22 +90,26 @@ func (d *Downloader) ensureFile(file DataFile) error {
 		return fmt.Errorf("检查文件 %s 失败: %v", file.Name, err)
 	}
 
-	// 如果文件不存在，直接下载
+	// 文件不存在：必须下载成功，否则缺少数据无法工作
 	if !exists {
 		printTimestampedMessage("下载 %s...", file.Name)
 		return d.downloadWithRetry(file)
 	}
 
-	// 检查文件是否需要更新（3天）
+	// 文件已存在但可能过期（超过3天）：尝试更新，但即使更新失败也继续使用现有文件。
+	// 这样可避免服务器在无法访问下载源（例如墙内无法直连 GitHub）时，
+	// 仅仅因为数据文件过期就启动失败。
 	needsUpdate, err := d.needsUpdate(file.LocalPath)
 	if err != nil {
-		return fmt.Errorf("检查文件 %s 更新时间失败: %v", file.Name, err)
+		// 无法判断是否过期，但文件已存在，继续使用
+		return nil
 	}
 
-	// 如果需要更新，下载新文件
 	if needsUpdate {
 		printTimestampedMessage("更新 %s...", file.Name)
-		return d.downloadWithRetry(file)
+		if err := d.downloadFile(file); err != nil {
+			printTimestampedMessage("更新 %s 失败，继续使用现有文件: %v", file.Name, err)
+		}
 	}
 
 	return nil
@@ -207,8 +211,8 @@ func (d *Downloader) showManualDownloadInstructions() {
 	fmt.Println("程序终止：缺少必要的数据文件")
 	fmt.Println()
 	fmt.Println("请手动下载以下文件到 data/ 目录：")
-	fmt.Println("1. cdn_keywords.txt: https://raw.githubusercontent.com/V2RaySSR/RealityChecker/main/data/cdn_keywords.txt")
-	fmt.Println("2. hot_websites.txt: https://raw.githubusercontent.com/V2RaySSR/RealityChecker/main/data/hot_websites.txt")
+	fmt.Println("1. cdn_keywords.txt: https://raw.githubusercontent.com/GEMILUXVII/RealityChecker/main/data/cdn_keywords.txt")
+	fmt.Println("2. hot_websites.txt: https://raw.githubusercontent.com/GEMILUXVII/RealityChecker/main/data/hot_websites.txt")
 	fmt.Println("3. gfwlist.conf: https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release/gfw.txt")
 	fmt.Println("4. Country.mmdb: https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb")
 	fmt.Println()
